@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kinetics Lab: Rapid Reaction</title>
+    <style>
+        :root {
+            --acid-cold: #00d4ff; --acid-hot: #ff4500;
+            --al-color: #bdc3c7; --mg-color: #f1f2f6; --oxide-color: #64748b;
+            --bg: #0f172a; --panel: #1e293b;
+            --bubble-color: rgba(239, 68, 68, 0.7);
+        }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: white; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        .sidebar { width: 260px; background: var(--panel); border-right: 1px solid #334155; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+        .main-content { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 15px; gap: 10px; overflow-y: auto; }
+
+        .control-group { background: #334155; padding: 12px; border-radius: 8px; border: 1px solid #475569; }
+        h3 { margin: 0 0 10px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; border-bottom: 1px solid #475569; padding-bottom: 4px; }
+        label { display: block; font-size: 10px; margin-bottom: 2px; color: #cbd5e1; font-weight: 600; }
+        select { width: 100%; padding: 6px; background: #0f172a; color: white; border: 1px solid #475569; border-radius: 4px; margin-bottom: 8px; font-size: 11px; }
+
+        .temp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .temp-slider { flex: 1; cursor: pointer; height: 4px; border-radius: 2px; background: #0f172a; appearance: none; outline: none; }
+        .temp-slider::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 2px solid var(--acid-cold); cursor: pointer; }
+        .temp-value { font-family: monospace; font-size: 12px; font-weight: bold; width: 40px; text-align: right; }
+
+        .lab-bench { display: flex; gap: 30px; align-items: flex-end; margin: 5px 0; }
+        .beaker-wrap { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 130px;}
+        .beaker { width: 110px; height: 130px; border: 3px solid #fff; border-top: none; border-radius: 0 0 15px 15px; position: relative; overflow: hidden; background: var(--acid-cold); transition: background 0.5s; }
+        
+        .reactant-label { font-size: 10px; font-weight: bold; color: #94a3b8; margin-top: 5px; text-align: center; min-height: 1.2em; }
+
+        .bubble {
+            position: absolute;
+            background: var(--bubble-color);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            bottom: 10px;
+            pointer-events: none;
+            animation: rise linear forwards;
+        }
+        @keyframes rise {
+            0% { transform: translateY(0) scale(0.5); opacity: 0.9; }
+            100% { transform: translateY(-110px) scale(1.3); opacity: 0; }
+        }
+
+        .syringe-body { width: 24px; height: 80px; border: 2px solid #94a3b8; border-bottom: none; position: relative; background: rgba(255,255,255,0.05); }
+        .plunger { position: absolute; bottom: 0; width: 100%; height: 100%; background: #ef4444; transform-origin: bottom; }
+
+        .powder-grid { 
+            position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%);
+            width: 80px; height: 40px; display: flex; flex-wrap: wrap; 
+            gap: 2px; justify-content: center; align-content: flex-end;
+        }
+        .grain { width: 5px; height: 5px; border-radius: 50%; transition: opacity 0.3s ease, transform 0.3s ease; }
+
+        .metal-strip { 
+            position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); 
+            width: 30px; height: 100px; 
+            transform-origin: bottom; transition: opacity 0.3s; z-index: 2; 
+            display: flex; align-items: center; justify-content: center;
+            box-sizing: border-box;
+        }
+        .oxide-border {
+            position: absolute;
+            inset: -3px;
+            border: 3px solid var(--oxide-color);
+            background: transparent;
+            pointer-events: none;
+            transition: opacity 0.2s, transform 0.2s;
+        }
+
+        .pop-btn { visibility: hidden; margin-bottom: 5px; padding: 2px 8px; background: #fbbf24; color: #000; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 9px; }
+        .canvas-wrap { background: #000; padding: 15px; border-radius: 12px; border: 1px solid #334155; width: 100%; max-width: 650px; }
+        .action-btns-central { display: flex; flex-direction: column; gap: 8px; justify-content: center; width: 100px; }
+        .btn { padding: 8px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; font-size: 11px; transition: filter 0.2s; }
+        .btn-run { background: #10b981; color: white; }
+        .btn-reset { background: #ef4444; color: white; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="control-group">
+        <h3>Setup A</h3>
+        <label>Solution</label>
+        <select id="acidA" onchange="updateLabels()">
+            <option value="1.2">HCl (strong, monobasic)</option>
+            <option value="2.6">H₂SO₄ (strong, dibasic)</option>
+            <option value="0.15">CH₃COOH (weak, monobasic)</option>
+        </select>
+        
+        <label>Temperature</label>
+        <div class="temp-row">
+            <input type="range" id="sliderA" class="temp-slider" min="25" max="80" value="25" oninput="updateTemp('A', this.value)">
+            <div id="txtA" class="temp-value">25°C</div>
+        </div>
+
+        <label>Reactant</label>
+        <select id="stateA" onchange="updateLabels()">
+            <option value="Mg_powder">Mg (powder)</option>
+            <option value="Mg_strip">Mg (strip)</option>
+            <option value="Al_powder">Al (powder)</option>
+            <option value="Al_strip" selected>Al (fresh strip)</option>
+            <option value="Al_ox">Al + Al₂O₃ (oxidised)</option>
+            <option value="MgO">MgO (s)</option>
+        </select>
+    </div>
+
+    <div class="control-group">
+        <h3>Setup B</h3>
+        <label>Solution</label>
+        <select id="acidB" onchange="updateLabels()">
+            <option value="1.2">HCl (strong, monobasic)</option>
+            <option value="2.6">H₂SO₄ (strong, dibasic)</option>
+            <option value="0.15">CH₃COOH (weak, monobasic)</option>
+        </select>
+        
+        <label>Temperature</label>
+        <div class="temp-row">
+            <input type="range" id="sliderB" class="temp-slider" min="25" max="80" value="25" oninput="updateTemp('B', this.value)">
+            <div id="txtB" class="temp-value">25°C</div>
+        </div>
+
+        <label>Reactant</label>
+        <select id="stateB" onchange="updateLabels()">
+            <option value="Al_ox">Al + Al₂O₃ (oxidised)</option>
+            <option value="Al_strip">Al (fresh strip)</option>
+            <option value="Al_powder" selected>Al (powder)</option>
+            <option value="Mg_powder">Mg (powder)</option>
+            <option value="Mg_strip">Mg (strip)</option>
+            <option value="MgO">MgO (s)</option>
+        </select>
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="lab-bench">
+        <div class="beaker-wrap">
+            <strong style="color:#10b981; font-size: 11px; margin-bottom: 3px;">BEAKER A</strong>
+            <button id="popA" class="pop-btn" onclick="squeakyPop('A')">H₂ TEST (POP)</button>
+            <div class="syringe-body"><div id="pA" class="plunger"></div></div>
+            <div class="beaker" id="bkA">
+                <div id="particlesA" class="powder-grid"></div>
+                <div id="stripA" class="metal-strip" style="display:none;"><div id="oxA" class="oxide-border"></div></div>
+            </div>
+            <div id="labelA" class="reactant-label">Al (fresh strip)</div>
+        </div>
+
+        <div class="action-btns-central">
+            <button class="btn btn-run" id="startBtn" onclick="runExperiment()">START LAB</button>
+            <button class="btn btn-reset" onclick="resetLab()">RESET</button>
+        </div>
+
+        <div class="beaker-wrap">
+            <strong style="color:#fbbf24; font-size: 11px; margin-bottom: 3px;">BEAKER B</strong>
+            <button id="popB" class="pop-btn" onclick="squeakyPop('B')">H₂ TEST (POP)</button>
+            <div class="syringe-body"><div id="pB" class="plunger"></div></div>
+            <div class="beaker" id="bkB">
+                <div id="particlesB" class="powder-grid"></div>
+                <div id="stripB" class="metal-strip" style="display:none;"><div id="oxB" class="oxide-border"></div></div>
+            </div>
+            <div id="labelB" class="reactant-label">Al (powder)</div>
+        </div>
+    </div>
+
+    <div class="canvas-wrap">
+        <canvas id="graph" width="650" height="280"></canvas>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('graph');
+    const ctx = canvas.getContext('2d');
+    let interval;
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    let tempsVal = { A: 25, B: 25 }; 
+
+    function updateTemp(id, val) {
+        tempsVal[id] = parseInt(val);
+        document.getElementById('txt' + id).innerText = val + '°C';
+    }
+
+    function updateLabels() {
+        document.getElementById('labelA').innerText = document.getElementById('stateA').options[document.getElementById('stateA').selectedIndex].text;
+        document.getElementById('labelB').innerText = document.getElementById('stateB').options[document.getElementById('stateB').selectedIndex].text;
+    }
+
+    function createBubble(beakerId, rate) {
+        if (rate < 0.005) return;
+        const beaker = document.getElementById('bk' + beakerId);
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        const size = Math.random() * 4 + 2;
+        bubble.style.width = size + 'px';
+        bubble.style.height = size + 'px';
+        bubble.style.left = Math.random() * 80 + 10 + '%';
+        bubble.style.animationDuration = (Math.random() * 0.4 + 0.3) + 's';
+        beaker.appendChild(bubble);
+        setTimeout(() => bubble.remove(), 700);
+    }
+
+    function drawGrid() {
+        ctx.clearRect(0,0,650,280);
+        ctx.strokeStyle = "#334155";
+        ctx.lineWidth = 1;
+        ctx.font = "10px monospace";
+        // Y-axis (Volume 0-250)
+        for(let i=0; i<=5; i++) {
+            let y = 240 - i * 40;
+            ctx.beginPath(); ctx.moveTo(50, y); ctx.lineTo(620, y); ctx.stroke();
+            ctx.fillStyle = "#94a3b8"; ctx.fillText(i*50, 15, y+4);
+        }
+        // X-axis (Time 0-200s)
+        for(let i=0; i<=10; i++) {
+            let x = 50 + i * 57;
+            ctx.beginPath(); ctx.moveTo(x, 240); ctx.lineTo(x, 40); ctx.stroke();
+            ctx.fillStyle = "#94a3b8"; ctx.fillText(i*20, x-8, 255);
+        }
+        ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(50, 240); ctx.lineTo(630, 240); ctx.moveTo(50, 240); ctx.lineTo(50, 30); ctx.stroke();
+        ctx.fillStyle = "#fff";
+        ctx.fillText("Volume H₂ (cm³)", 5, 20);
+        ctx.fillText("Time (s)", 320, 275);
+    }
+
+    function squeakyPop(id) {
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.frequency.setValueAtTime(1400, now);
+        osc.frequency.exponentialRampToValueAtTime(150, now + 0.1);
+        g.gain.setValueAtTime(0.3, now);
+        g.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc.connect(g); g.connect(audioCtx.destination);
+        osc.start(); osc.stop(now + 0.2);
+        document.getElementById('pop'+id).style.visibility = 'hidden';
+    }
+
+    function resetLab() {
+        clearInterval(interval);
+        drawGrid();
+        document.querySelectorAll('.plunger').forEach(p => p.style.transform = 'scaleY(1)');
+        document.querySelectorAll('.pop-btn').forEach(b => b.style.visibility = 'hidden');
+        document.getElementById('startBtn').disabled = false;
+        ['A', 'B'].forEach(id => {
+            document.getElementById('particles'+id).innerHTML = '';
+            document.getElementById('strip'+id).style.display = 'none';
+            document.getElementById('strip'+id).style.opacity = '1';
+            document.getElementById('strip'+id).style.transform = 'translateX(-50%) scale(1)';
+            document.getElementById('ox'+id).style.opacity = '1';
+            document.getElementById('ox'+id).style.borderWidth = '3px';
+            document.getElementById('bk'+id).style.background = 'var(--acid-cold)';
+        });
+    }
+
+    function runExperiment() {
+        document.getElementById('startBtn').disabled = true;
+        const getTempMultiplier = (val) => 1 + ((val - 25) / 55) * 4;
+
+        const configs = [
+            { id: 'A', acid: parseFloat(document.getElementById('acidA').value), tempMult: getTempMultiplier(tempsVal.A), state: document.getElementById('stateA').value },
+            { id: 'B', acid: parseFloat(document.getElementById('acidB').value), tempMult: getTempMultiplier(tempsVal.B), state: document.getElementById('stateB').value }
+        ];
+
+        configs.forEach(c => {
+            const grid = document.getElementById('particles'+c.id);
+            const strip = document.getElementById('strip'+c.id);
+            const ox = document.getElementById('ox'+c.id);
+            if(c.state.includes('powder')) {
+                grid.innerHTML = ''; strip.style.display = 'none';
+                const color = c.state.includes('Mg') ? 'var(--mg-color)' : 'var(--al-color)';
+                for(let i=0; i<80; i++) {
+                    let g = document.createElement('div');
+                    g.className = 'grain'; g.style.background = color;
+                    grid.appendChild(g);
+                }
+            } else if (c.state !== 'MgO') {
+                grid.innerHTML = ''; strip.style.display = 'flex';
+                strip.style.background = c.state.includes('Mg') ? 'var(--mg-color)' : 'var(--al-color)';
+                ox.style.display = (c.state === 'Al_ox') ? 'block' : 'none';
+            }
+        });
+
+        let ticks = 0, vA = 0, vB = 0, dataA = [], dataB = [];
+        const MAX_TIME = 200; 
+        const STEP = 0.5; 
+
+        interval = setInterval(() => {
+            ticks += STEP;
+            const xPos = 50 + (ticks / MAX_TIME) * 570;
+
+            const calc = (vPrev, c) => {
+                if(c.state === 'MgO') return { v: 0, rate: 0 };
+                let delay = (c.state === 'Al_ox') ? (15 / (c.acid * c.tempMult)) : 0;
+                
+                if (c.state === 'Al_ox' && ticks < delay) {
+                    const progress = ticks / delay;
+                    document.getElementById('ox'+c.id).style.borderWidth = (3 * (1 - progress)) + 'px';
+                    document.getElementById('ox'+c.id).style.opacity = 1 - progress;
+                }
+                
+                if (ticks < delay) return { v: 0, rate: 0 };
+                if (c.state === 'Al_ox') document.getElementById('ox'+c.id).style.display = 'none';
+
+                const V_max = 240; 
+                // Increased k for faster reaction (finish by ~80s)
+                let k_base = c.state.includes('Mg') ? 0.35 : 0.22;
+                let sa = c.state.includes('powder') ? 1.4 : 0.6;
+                let k = k_base * sa * c.acid * c.tempMult * 0.12; 
+                
+                let t = ticks - delay;
+                let v = V_max * (1 - Math.exp(-k * t));
+                
+                // Natural plateau
+                if (v >= 239.8) {
+                    if (vPrev < 239.8) document.getElementById('pop'+c.id).style.visibility = 'visible';
+                    document.getElementById('strip'+c.id).style.opacity = '0';
+                    return { v: 240, rate: 0 };
+                }
+                return { v, rate: v - vPrev };
+            };
+
+            const resA = calc(vA, configs[0]);
+            const resB = calc(vB, configs[1]);
+            vA = resA.v; vB = resB.v;
+
+            if (resA.rate > 0.01) for(let i=0; i<Math.min(Math.ceil(resA.rate * 20), 10); i++) createBubble('A', resA.rate);
+            if (resB.rate > 0.01) for(let i=0; i<Math.min(Math.ceil(resB.rate * 20), 10); i++) createBubble('B', resB.rate);
+
+            dataA.push({x: xPos, y: 240 - vA * 0.8});
+            dataB.push({x: xPos, y: 240 - vB * 0.8});
+
+            document.getElementById('pA').style.transform = `scaleY(${1 - vA/255})`;
+            document.getElementById('pB').style.transform = `scaleY(${1 - vB/255})`;
+
+            const updateViz = (id, v, state) => {
+                if(state.includes('powder')) {
+                    const grains = document.querySelectorAll(`#particles${id} .grain`);
+                    const countToHide = Math.floor((v/240) * 80);
+                    grains.forEach((g, i) => { if (i < countToHide) g.style.opacity = '0'; });
+                } else if(state !== 'MgO') {
+                    document.getElementById('strip'+id).style.transform = `translateX(-50%) scaleX(${Math.max(0, 1 - v/240)})`;
+                }
+            };
+            updateViz('A', vA, configs[0].state); updateViz('B', vB, configs[1].state);
+
+            drawGrid();
+            ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            if(dataA.length > 1) {
+                ctx.strokeStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(dataA[0].x, dataA[0].y);
+                for(let i=1; i<dataA.length; i++) ctx.lineTo(dataA[i].x, dataA[i].y); ctx.stroke();
+            }
+            if(dataB.length > 1) {
+                ctx.strokeStyle = '#fbbf24'; ctx.beginPath(); ctx.moveTo(dataB[0].x, dataB[0].y);
+                for(let i=1; i<dataB.length; i++) ctx.lineTo(dataB[i].x, dataB[i].y); ctx.stroke();
+            }
+
+            if (ticks >= MAX_TIME) { clearInterval(interval); document.getElementById('startBtn').disabled = false; }
+        }, 30);
+    }
+    drawGrid();
+    updateLabels();
+</script>
+</body>
+</html>
